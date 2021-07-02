@@ -1,0 +1,42 @@
+#Snakemake configuration file
+
+#This contains the setup for a human/chimp run on 10x
+
+#directory with additional scripts
+ken_scripts: /project2/gilad/kenneth/Pipelines/Scripts/
+
+#logfile
+dir_log: log/
+
+#individuals
+humans: NA19160.variant2,NA18511.variant2,NA18858.variant2,SCM-6.variant,SCM-7.variant,SCM-8.variant,SCM-9.variant,SCM-10.variant,SCM-12.variant,SCM-13.variant
+chimps: SCM-2,SCM-3,SCM-4
+  
+#Genome fa
+human_fa: /project2/gilad/kenneth/References/human/genome/hg38.fa
+chimp_fa: /project2/gilad/kenneth/References/chimp/genome/panTro6.fa
+ 
+#Genome index for STAR aligner
+human_genome_index: /project2/gilad/kenneth/References/human/STARindex/ens98_hg38_full_99/
+chimp_genome_index: /project2/gilad/kenneth/References/chimp/STARindex/full_chimp_inhuman/
+
+#whitelist 
+whitelist: /project2/gilad/kenneth/References/whitelists/whitelist.v3.txt
+
+#demuxlet files
+human_vcf: /project2/gilad/kenneth/References/human/vcfs/human.HC_YRI.hg38.exons.vcf
+chimp_vcf: /project2/gilad/kenneth/References/chimp/vcfs/output.pt6.exons.vcf
+
+# script locations
+popscle: /project2/gilad/kenneth/software/popscle/bin/popscle
+samtools: /project2/gilad/kenneth/software/samtools-1.10/samtools
+
+#it wont use my conda python so for some reason i need to link it to the python bin
+python: /scratch/midway2/barr/miniconda3/envs/chromium/bin/python
+
+#transcript file
+human_txn_file: /project2/gilad/kenneth/References/human/GTF/ens98.filtered.gtf
+chimp_txn_file: /project2/gilad/kenneth/References/chimp/GTF/gencode.transmap.filtered.withM.gtf
+
+# cell barcode UMI Configuration
+barcode: "CCCCCCCCCCCCCCCCNNNNNNNNNN"

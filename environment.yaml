@@ -1,0 +1,61 @@
+# Conda configuration file to reproduce computing environment
+#
+# Create the conda environment:
+#
+# conda env create --file environment.yaml
+#
+# Update the conda environment:
+#
+# conda env update --file environment.yaml
+#
+# Activate the conda environment:
+#
+# source activate chromium
+#
+# Deactivate the conda environment:
+#
+# source deactivate chromium
+#
+# Resources:
+
+
+name:
+    chromium
+channels:
+    - bioconda
+    - conda-forge
+    - default
+dependencies:
+    - deeptools
+    - picard
+    - subread
+    - pandoc
+    - fastqc
+    - snakemake
+    - umi_tools >= 0.5.1
+    - STAR >=2.7.3a-0
+    - samtools 
+    - multiqc
+    - cutadapt
+    - pysam
+    - bcftools
+    - crossmap
+    - pandas
+    - numpy
+    - matplotlib
+    - r-essentials 
+    - r-base
+    - r-optparse
+    - r-seurat
+    - bioconductor-dropletutils
+    - seqkit
+    - bedtools
+    
+    
+
+
+
+    
+    
+    
+

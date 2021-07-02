@@ -1,0 +1,471 @@
+#Snakefile for Dropseq analysis based on a fixed (i.e. not automatically inferred) number of cells
+
+import glob
+import os
+
+# Configuration ----------------------------------------------------------------
+#these things should go to the config file
+#configfile: "/project2/gilad/kenneth/HumanChimpEBs/Pipeline/config_solo_pantro5_hg38.yaml"
+
+#Scripts
+ken_scripts = config["ken_scripts"]
+
+#cell barcode UMI structure
+barcode = config["barcode"]
+
+#whitelist
+whitelist = config["whitelist"]
+
+#individuals
+humans = config["humans"]
+chimps = config["chimps"]
+
+#genome_index
+HumanGenomeIndex = config["human_genome_index"]
+ChimpGenomeIndex = config["chimp_genome_index"]
+
+#genome_fa
+HumanGenomeFa = config["human_fa"]
+ChimpGenomeFa = config["chimp_fa"]
+
+#gene file
+human_txn_file = config["human_txn_file"]
+chimp_txn_file = config["chimp_txn_file"]
+
+#demuxlet script
+popscle = config["popscle"]
+human_vcf = config["human_vcf"]
+chimp_vcf = config["chimp_vcf"]
+
+samtools = config["samtools"]
+python = config["python"]
+
+pd = config["proj_dir"]
+fastq_dir = pd + "fastq/"
+
+#make sure the project directory actually exists
+#assert os.path.exists(pd), "Project directory exists"
+
+# Directory to send log files. Needs to be created manually since it
+# is not a file created by a Snakemake rule.
+dir_log = config["dir_log"]
+if not os.path.isdir(dir_log):
+    os.mkdir(dir_log)
+    
+# input data # might need to be changed to be universal
+
+samples = set(glob_wildcards(fastq_dir + "{samples}_R1.fastq.gz").samples)
+
+rule all:
+    input: 
+        expand("{sample}_human/Aligned.sortedByName.out.bam", sample = samples),
+        expand("{sample}_human/Aligned.sortedByCoord.out.bam", sample = samples),
+        expand("{sample}_human/Aligned.sortedByCoord.out.bam.bai", sample = samples),
+        expand("{sample}_chimp/Aligned.sortedByName.out.bam", sample = samples),
+        expand("{sample}_chimp/Aligned.sortedByCoord.out.bam", sample = samples),
+        expand("{sample}_chimp/Aligned.sortedByCoord.out.bam.bai", sample = samples),
+        "human.vcf",
+        "chimp.vcf",
+        expand("{sample}_human/pileup.bam", sample = samples),
+        expand("{sample}_chimp/pileup.bam", sample = samples),
+        expand("{sample}_human/demuxlet.best.gz", sample = samples),
+        expand("{sample}_chimp/demuxlet.best.gz", sample = samples),
+        expand("{sample}/species.csv.gz", sample = samples)
+
+
+rule align_human:
+    input:
+        cDNA_read = fastq_dir + "{sample}_R2.fastq.gz",
+        bc_read = fastq_dir + "{sample}_R1.fastq.gz", 
+        ref_genome = HumanGenomeIndex,
+        whitelist = whitelist
+    output:
+        bam      = temp("{sample}_human/Aligned.sortedByCoord.out.bam"),
+        unsorted = temp("{sample}_human/Aligned.out.bam")
+        # mat = "{sample}_matrix.mtx",
+        # matGeneFull =  "{sample}_matrixGeneFull.mtx",
+        # genes =  "{sample}_genes.tsv",
+        # barcodes =  "{sample}_barcodes.tsv"
+    params:
+        tmpdir = "./_STARtmp_human_{sample}",
+        prefix =  "{sample}_human/",
+        CBstart = 1,
+        CBlen = 16,
+        UMIstart = 17,
+        UMIlen = 12,
+        multimap = 1,
+        threads = 8,
+        strand = "Forward"
+    log:
+        dir_log + "{sample}_rule_align_human.err", 
+    shell:
+        """
+        STAR --runThreadN {params.threads} \
+--genomeDir {input.ref_genome} \
+--soloUMIfiltering MultiGeneUMI \
+--soloCBmatchWLtype 1MM_multi_pseudocounts \
+--outSAMtype BAM Unsorted SortedByCoordinate \
+--outSAMattributes NH HI AS nM CR CY UR UY CB UB \
+--outStd BAM_SortedByCoordinate \
+--soloType CB_UMI_Simple \
+--soloCBwhitelist {input.whitelist} \
+--soloCBstart {params.CBstart} \
+--soloCBlen {params.CBlen} \
+--soloUMIstart {params.UMIstart} \
+--soloUMIlen {params.UMIlen} \
+--soloStrand {params.strand} \
+--soloFeatures Gene GeneFull \
+--soloUMIdedup 1MM_Directional \
+--outFileNamePrefix {params.prefix} \
+--soloOutFileNames ./ "genes.tsv" "barcodes.tsv" "matrix.mtx" "matrixGeneFull.mtx" \
+--readFilesIn {input.cDNA_read} {input.bc_read} \
+--readFilesCommand zcat \
+--outTmpDir {params.tmpdir} \
+--outSAMunmapped Within \
+--outFilterMultimapNmax {params.multimap} > {output.bam} 2> {log}
+        """
+        
+rule align_chimp:
+    input:
+        cDNA_read = fastq_dir + "{sample}_R2.fastq.gz",
+        bc_read = fastq_dir + "{sample}_R1.fastq.gz",
+        ref_genome = ChimpGenomeIndex,
+        whitelist = whitelist
+    output:
+        bam      =  temp("{sample}_chimp/Aligned.sortedByCoord.out.bam"),
+        unsorted =  temp("{sample}_chimp/Aligned.out.bam")
+        # mat = "{sample}_matrix.mtx",
+        # matGeneFull =  "{sample}_matrixGeneFull.mtx",
+        # genes =  "{sample}_genes.tsv",
+        # barcodes =  "{sample}_barcodes.tsv"
+    params:
+        tmpdir = "./_STARtmp_chimp_{sample}",
+        prefix = "{sample}_chimp/",
+        CBstart = 1,
+        CBlen = 16,
+        UMIstart = 17,
+        UMIlen = 12,
+        multimap = 1,
+        threads = 8,
+        strand = "Forward"
+    log:
+        dir_log + "{sample}_rule_align_chimp.err"
+    shell:
+        """
+        STAR --runThreadN {params.threads} \
+--genomeDir {input.ref_genome} \
+--soloUMIfiltering MultiGeneUMI \
+--soloCBmatchWLtype 1MM_multi_pseudocounts \
+--outSAMtype BAM Unsorted SortedByCoordinate \
+--outSAMattributes NH HI AS nM CR CY UR UY CB UB \
+--outStd BAM_SortedByCoordinate \
+--soloType CB_UMI_Simple \
+--soloCBwhitelist {input.whitelist} \
+--soloCBstart {params.CBstart} \
+--soloCBlen {params.CBlen} \
+--soloUMIstart {params.UMIstart} \
+--soloUMIlen {params.UMIlen} \
+--soloStrand {params.strand} \
+--soloFeatures Gene GeneFull \
+--soloUMIdedup 1MM_Directional \
+--outFileNamePrefix {params.prefix} \
+--soloOutFileNames ./ "genes.tsv" "barcodes.tsv" "matrix.mtx" "matrixGeneFull.mtx" \
+--readFilesIn {input.cDNA_read} {input.bc_read} \
+--readFilesCommand zcat \
+--outTmpDir {params.tmpdir} \
+--outSAMunmapped Within \
+--outFilterMultimapNmax {params.multimap} > {output.bam} 2> {log}
+        """
+
+rule index_bam_human:
+    input:
+        "{sample}_human/Aligned.sortedByCoord.out.bam"
+    output:
+        "{sample}_human/Aligned.sortedByCoord.out.bam.bai"
+    log:
+        dir_log + "{sample}_rule_index_bam_human.err"
+    shell:
+        "samtools index {input} 2> {log}"
+
+rule index_bam_chimp:
+    input:
+        "{sample}_chimp/Aligned.sortedByCoord.out.bam"
+    output:
+        "{sample}_chimp/Aligned.sortedByCoord.out.bam.bai"
+    log:
+        dir_log + "{sample}_rule_index_bam_chimp.err"
+    shell:
+        "samtools index {input} 2> {log}"
+     
+# make bams for popscle
+rule make_popscle_bam_human:
+    input:
+        inbam = "{sample}_human/Aligned.sortedByCoord.out.filtered.bam",
+        inbai = "{sample}_human/Aligned.sortedByCoord.out.filtered.bam.bai",
+        invcf = "human.vcf.bed"   
+    output:
+        outbam = "{sample}_human/pileup.bam",
+        outbai = "{sample}_human/pileup.bam.bai"
+    log:
+        dir_log + "{sample}_make_popscle_bam_human.err"
+    shell:
+        """
+        {samtools_bin} view -@ 8 -L {input.invcf} -o {output.outbam} {input.inbam}
+        {samtools_bin} index -@ 8 {output.outbam}
+        """
+        
+# make bams for popscle
+rule make_popscle_bam_chimp:
+    input:
+        inbam = "{sample}_chimp/Aligned.sortedByCoord.out.filtered.bam",
+        inbai = "{sample}_chimp/Aligned.sortedByCoord.out.filtered.bam.bai",
+        invcf = "chimp.vcf.bed"   
+    output:
+        outbam = "{sample}_chimp/pileup.bam",
+        outbai = "{sample}_chimp/pileup.bam.bai"
+    log:
+        dir_log + "{sample}_make_popscle_bam_chimp.err"
+    shell:
+        """
+        {samtools_bin} view -@ 8 -L {input.invcf} -o {output.outbam} {input.inbam}
+        {samtools_bin} index -@ 8 {output.outbam}
+        """
+     
+# subset vcfs
+rule subset_vcf_human:
+    output:
+        sorted = "human.vcf",
+        unsorted = "human.unsorted.vcf",
+        bed = "human.vcf.bed"
+    log:
+        dir_log + "subset_vcf_human.err"
+    params:
+        compressed = "human.vcf.gz"
+    shell:
+        """
+        source {ken_scripts}/popscle_helper_tools/filter_vcf_file_for_popscle.sh
+        subset_samples_from_vcf {humans} {human_vcf} \
+        | filter_out_mutations_missing_genotype_for_one_or_more_samples \
+        | filter_out_mutations_homozygous_reference_in_all_samples \
+        | filter_out_mutations_homozygous_in_all_samples \
+        > {output.unsorted} 2> {log}
+        bcftools sort -Oz {output.unsorted} -o {params.compressed}
+        gunzip {params.compressed}
+        bedtools merge -i {output.sorted} > {output.bed}
+        """
+
+rule subset_vcf_chimp:
+    output:
+        sorted = "chimp.vcf",
+        unsorted = "chimp.unsorted.vcf",
+        bed = "chimp.vcf.bed"
+    log:
+        dir_log + "subset_vcf_chimp.err"
+    params:
+        compressed = "chimp.vcf.gz"
+    shell:
+        """
+        source {ken_scripts}/popscle_helper_tools/filter_vcf_file_for_popscle.sh
+        subset_samples_from_vcf {chimps} {chimp_vcf} \
+        | filter_out_mutations_missing_genotype_for_one_or_more_samples \
+        | filter_out_mutations_homozygous_reference_in_all_samples \
+        | filter_out_mutations_homozygous_in_all_samples \
+        > {output.unsorted} 2> {log}
+        bcftools sort -Oz {output.unsorted} -o {params.compressed}
+        gunzip {params.compressed}
+        bedtools merge -i {output.sorted} > {output.bed}
+        """
+
+rule build_human_vcf_pileup:
+    input:
+        invcf = "human.vcf",
+        inbam = "{sample}_human/pileup.bam",
+        inbai = "{sample}_human/pileup.bam.bai",
+    output:
+         "{sample}_human/pileup.cel.gz"
+    params:
+         "{sample}_human/pileup"
+    log:
+        dir_log + "{sample}_build_human_vcf_pileup.err"
+    shell:
+        """
+        {popscle} dsc-pileup --sam {input.inbam} --vcf {input.invcf} --out {params}
+        """
+        
+rule build_chimp_vcf_pileup:
+    input:
+        invcf = "chimp.vcf",
+        inbam = "{sample}_chimp/pileup.bam",
+        inbai = "{sample}_chimp/pileup.bam.bai",
+    output:
+         "{sample}_chimp/pileup.cel.gz"
+    params:
+         "{sample}_chimp/pileup"
+    log:
+        dir_log + "{sample}_rule_build_chimp_vcf_pileup.err"
+    shell:
+        """
+        {popscle} dsc-pileup --sam {input.inbam} --vcf {input.invcf} --out {params}
+        """
+    
+# demuxlet
+rule run_demuxlet_human:
+    input:
+        invcf = "human.vcf",
+        inpileup = "{sample}_human/pileup.cel.gz",
+        inbam = "{sample}_human/Aligned.sortedByCoord.out.filtered.bam",
+        inbai = "{sample}_human/Aligned.sortedByCoord.out.filtered.bam.bai"
+    output:
+        temp("{sample}_human/demuxlet.best")
+    params:
+        inpileup = "{sample}_human/pileup",
+        outdemux = "{sample}_human/demuxlet"
+    log:
+        dir_log + "{sample}_rule_run_demuxlet_human.err"
+    shell:
+        """
+        {popscle} demuxlet --field GT --plp {params.inpileup} --vcf {input.invcf} --out {params.outdemux} 2> {log}
+        """
+
+rule run_demuxlet_chimp:
+    input:
+        invcf = "chimp.vcf",
+        inpileup = "{sample}_chimp/pileup.cel.gz",
+        inbam = "{sample}_chimp/Aligned.sortedByCoord.out.filtered.bam",
+        inbai = "{sample}_chimp/Aligned.sortedByCoord.out.filtered.bam.bai"
+    output:
+        temp("{sample}_chimp/demuxlet.best")
+    params:
+        inpileup = "{sample}_chimp/pileup",
+        outdemux = "{sample}_chimp/demuxlet"
+    log:
+        dir_log + "{sample}_rule_run_demuxlet_chimp.err"
+    shell:
+        """
+        {popscle} demuxlet --field PL --plp {params.inpileup} --vcf {input.invcf} --out {params.outdemux} 2> {log}
+        """
+  
+# assign species
+
+rule sort_bam_human:
+    input:
+        "{sample}_human/Aligned.out.bam"
+    output:
+        temp("{sample}_human/Aligned.sortedByName.out.bam")
+    log:
+        dir_log + "{sample}_rule_sort_bam_human.err"
+    shell:
+        "samtools sort -n -o {output} -O bam {input} 2> {log}"
+        
+rule sort_bam_chimp:
+    input:
+        "{sample}_chimp/Aligned.out.bam"
+    output:
+        temp("{sample}_chimp/Aligned.sortedByName.out.bam")
+    log:
+        dir_log + "{sample}_rule_sort_bam_chimp.err"
+    shell:
+        "samtools sort -n -o {output} -O bam {input} 2> {log}"
+        
+rule assign_species:
+    input:
+         human = "{sample}_human/Aligned.sortedByName.out.bam",
+         chimp = "{sample}_chimp/Aligned.sortedByName.out.bam"
+    output:
+         temp("{sample}/species.csv")
+    log:
+        dir_log + "{sample}_rule_assign_species.err"
+    shell:
+        """
+        {python} {ken_scripts}/assign_species.py {input.human} {input.chimp} {output}
+        """
+
+rule barcode_files:
+    input:
+        "{sample}/species.csv.gz"
+    output:
+        humanfull = "{sample}_human/barcodes.full.txt",
+        chimpfull = "{sample}_chimp/barcodes.full.txt",
+        human = "{sample}_human/barcodes.txt",
+        chimp = "{sample}_chimp/barcodes.txt"
+    log:
+        human = dir_log + "{sample}_barcode_files_human.err",
+        chimp = dir_log + "{sample}_barcode_files_chimp.err"
+    shell:
+        """
+        zcat {input} | bash {ken_scripts}/human_barcodes.sh > {output.humanfull} 2> {log.human}
+        bash {ken_scripts}/trim_barcode_tag.sh {output.humanfull} > {output.human}
+        zcat {input} | bash {ken_scripts}/chimp_barcodes.sh > {output.chimpfull} 2> {log.chimp}
+        bash {ken_scripts}/trim_barcode_tag.sh {output.chimpfull} > {output.chimp}
+        """
+
+rule chimp_filtered_bam:
+    input:
+         inbam = "{sample}_chimp/Aligned.sortedByCoord.out.bam",
+         filter = "{sample}_chimp/barcodes.txt"
+    output:
+         bam = "{sample}_chimp/Aligned.sortedByCoord.out.filtered.bam",
+         bai = "{sample}_chimp/Aligned.sortedByCoord.out.filtered.bam.bai"
+    log:
+         dir_log + "{sample}_chimp_filtered_bam.err"
+    shell:
+         """
+         bash {ken_scripts}/samtools_filter_barcodes.sh {input.filter} {output.bam} {input.inbam}
+         """
+        
+rule human_filtered_bam:
+    input:
+         inbam = "{sample}_human/Aligned.sortedByCoord.out.bam",
+         filter = "{sample}_human/barcodes.txt"
+    output:
+         bam = "{sample}_human/Aligned.sortedByCoord.out.filtered.bam",
+         bai = "{sample}_human/Aligned.sortedByCoord.out.filtered.bam.bai"
+    log:
+         dir_log + "{sample}_human_filtered_bam.err"
+    shell:
+         """
+         bash {ken_scripts}/samtools_filter_barcodes.sh {input.filter} {output.bam} {input.inbam}
+         """
+     
+rule gzip_mol_info:
+    input:
+         human = "{sample}_human/molecule_counts.tsv",
+         chimp = "{sample}_chimp/molecule_counts.tsv"
+    output:
+         human = "{sample}_human/molecule_counts.tsv.gz",
+         chimp = "{sample}_chimp/molecule_counts.tsv.gz"
+    log:
+         dir_log + "{sample}_zip_mol_info.err",
+    shell:
+        """
+        gzip {input.human}
+        gzip {input.chimp}
+        """
+
+rule gzip_demuxlet:
+    input:
+         human = "{sample}_human/demuxlet.best",
+         chimp = "{sample}_chimp/demuxlet.best"
+    output:
+         human = "{sample}_human/demuxlet.best.gz",
+         chimp = "{sample}_chimp/demuxlet.best.gz"
+    log:
+         dir_log + "{sample}_zip_demuxlet.err",
+    shell:
+        """
+        gzip {input.human}
+        gzip {input.chimp}
+        """
+
+rule gzip_species:
+    input:
+         "{sample}/species.csv"
+    output:
+         "{sample}/species.csv.gz"
+    log:
+         dir_log + "{sample}_zip_species.err",
+    shell:
+        """
+        gzip {input}
+        """
+

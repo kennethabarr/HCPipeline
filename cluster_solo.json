@@ -1,0 +1,88 @@
+{
+    "__default__" :
+    {
+      "mem" : 8000,
+      "n" : 1,
+      "tasks" : 1,
+      "name" : "{rule}-{wildcards}",
+      "logfile": "log/{rule}-{wildcards}.out",
+      "partition": "broadwl"
+    },
+    "fastqc" :
+    {
+      "mem" : 8000
+    },
+    "align_human" :
+    {
+      "mem": 48000,
+      "tasks": 20
+    },
+    "align_chimp" :
+    {
+      "mem": 48000,
+      "tasks": 8
+    },
+    "run_demuxlet_human" :
+    {
+      "mem": 32000,
+      "tasks": 1,
+      "partition": "gilad"
+    },
+    "run_demuxlet_chimp" :
+    {
+      "mem": 32000,
+      "tasks": 1
+    },
+    "build_chimp_vcf_pileup" :
+    {
+      "mem": 32000,
+      "tasks": 8
+    },
+    "make_popscle_bam_human" :
+    {
+      "mem": 32000,
+      "tasks": 8
+    },
+    "make_popscle_bam_chimp" :
+    {
+      "mem": 32000,
+        "tasks": 1
+    },
+     "human_filtered_bam" :
+    {
+      "mem": 32000,
+      "tasks": 8
+    },
+    "chimp_filtered_bam" :
+    {
+      "mem": 32000,
+      "tasks": 1
+    },
+    "build_human_vcf_pileup" :
+    {
+      "mem": 32000,
+      "tasks": 1
+    },
+    "run_molinfo_human" :
+    {
+      "mem": 48000,
+      "partition": "broadwl",
+      "tasks": 1
+    },
+    "run_molinfo_chimp" :
+    {
+      "mem": 48000,
+      "partition": "broadwl",
+      "tasks": 1
+    },
+    "assign_species" :
+    {
+      "mem": 16000,
+      "tasks": 1
+    },
+    "render_report" :
+    {
+      "mem": 32000,
+      "tasks": 4
+    }
+}
